@@ -115,7 +115,7 @@ export function getLendingAndBorrowingApys(krData: any, utilization: number) {
     const lendingApy = calculateAPYFromAPR(supplyApr);
     const borrowApr = calculateBorrowAPR(krData, utilization);
     const borrowApy = calculateAPYFromAPR(borrowApr);
-    return { lendingApy, borrowApy };
+    return [ lendingApy, borrowApy ];
 
 }
 

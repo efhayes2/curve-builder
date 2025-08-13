@@ -9,12 +9,13 @@ export async function GET() {
         const connection = new Connection(process.env.RPC_URL!, 'confirmed')
         const bankData = getTokenDataMap()
 
-        const [kaminoRates, marginfiRates] = await Promise.all([
+        // const [kaminoRates, marginfiRates] = await Promise.all([
+        const [kaminoRates] = await Promise.all([
             getKaminoRates(connection, bankData),
-            getMarginfiRates(connection, bankData),
+            // getMarginfiRates(connection, bankData),
         ])
 
-        const allRates: ProtocolDataRow[] = [...kaminoRates, ...marginfiRates];
+        const allRates: ProtocolDataRow[] = [...kaminoRates]; // , ...marginfiRates];
         return Response.json(allRates);
     } catch (error) {
         console.error('Failed to load protocol rates:', error)

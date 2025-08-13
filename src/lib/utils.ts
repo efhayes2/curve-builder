@@ -65,7 +65,7 @@ export type TokenData = {
 
 
 export function getTokenDataMap(): Record<string, TokenData> {
-    const useFullTable = true;
+    const useFullTable = false;
     if (useFullTable)
         return getTokenDataMapFull();
     return getTokenDataMapPartial();

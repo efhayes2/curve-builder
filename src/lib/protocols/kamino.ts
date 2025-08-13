@@ -28,6 +28,7 @@ export async function getKaminoRates(
         }
 
         await kaminoMarket.loadReserves()
+        // save for later
         //const currentSlot = await connection.getSlot()
 
         const rates = Object.entries(tokenData)

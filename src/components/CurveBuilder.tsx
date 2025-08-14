@@ -136,7 +136,6 @@ export default function CurveBuilder({
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* LEFT: Controls + Chart */}
                 <section className="lg:col-span-2 space-y-6">
-                    <h2 className="text-2xl font-semibold">Curve Builder</h2>
 
                     {/* Selectors */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">

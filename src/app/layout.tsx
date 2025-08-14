@@ -27,7 +27,7 @@ export default function RootLayout({
       <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
       <div className="mx-auto max-w-7xl space-y-8 px-4 py-8">
-        <h1 className="text-center text-3xl font-bold">Protocol Comparison</h1>
+        <h1 className="text-center text-3xl font-bold">Curve Viewer</h1>
         {children}
       </div>
       </body>

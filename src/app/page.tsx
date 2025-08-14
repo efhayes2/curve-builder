@@ -41,8 +41,8 @@ export default function HomePage() {
 
     return (
         <main className="min-h-screen w-full p-6">
-            <h1 className="text-center text-3xl font-bold mb-8">Curve Builder</h1>
             <CurveBuilder data={data} status={status} error={error} onRefresh={fetchCurves} />
         </main>
-    );
+
+);
 }

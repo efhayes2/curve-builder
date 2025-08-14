@@ -20,8 +20,6 @@ export default function HomePage() {
             const res = await fetch(API_PATH, { cache: "no-store" });
             console.log("fetchCurves: got res", res.status);
 
-            debugger; // <-- Pause again after response
-
             if (!res.ok) {
                 console.warn(`fetchCurves: non-OK HTTP status ${res.status}`);
                 setStatus("error");

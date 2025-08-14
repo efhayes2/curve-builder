@@ -1,122 +1,125 @@
 // src/lib/protocols/kamino.ts
 
-import { getLendingAndBorrowingApys} from '@/lib/utils/kamino-functions'
-import { Connection, PublicKey } from '@solana/web3.js'
-import { KaminoMarket } from '@kamino-finance/klend-sdk'
-import { TokenData } from '@/lib/utils' // where your TokenData lives
-import { transformBorrowCurve, writeBorrowCurveLog } from '@/lib/utils/borrow-curve'
+import "server-only";
+import { getLendingAndBorrowingApys } from "@/lib/utils/kamino-functions";
+import { Connection, PublicKey } from "@solana/web3.js";
+import { KaminoMarket } from "@kamino-finance/klend-sdk";
+import { TokenData } from "@/lib/utils"; // your TokenData
+import { transformBorrowCurve /*, writeBorrowCurveLog */ } from "@/lib/utils/borrow-curve";
+
+export type CurveVector = { knots: number[]; values: number[] };
+export type CurveEntry = {
+    borrowRates: CurveVector;
+    lendingRates: CurveVector;
+};
+export type CurvesResponse = Record<string, CurveEntry>;
+export { getKaminoCurves as getKaminoRates };
 
 
-// Collect per-token curves already transformed to {knots, values}
-const borrowCurveLog: Record<string, { knots: number[]; values: number[] }> = {}
+// Optional: collect per-token borrow curves (already transformed) for logging
+const borrowCurveLog: Record<string, { knots: number[]; values: number[] }> = {};
 
+/**
+ * Build 0..100 percent knots with a step specified as a FRACTION (e.g., 0.10 => 10% increments).
+ * Returns percent knots: [0, 10, 20, ..., 100] for stepFraction=0.10
+ */
+function makePercentKnots(stepFraction: number): number[] {
+    if (stepFraction <= 0 || stepFraction > 1) {
+        throw new Error(`Invalid stepFraction=${stepFraction}. Expected (0, 1].`);
+    }
+    const stepPercent = stepFraction * 100; // e.g., 0.10 -> 10
+    const count = Math.floor(100 / stepPercent) + 1;
+    return Array.from({ length: count }, (_, i) => +(i * stepPercent).toFixed(2));
+}
 
-export async function getKaminoRates(
+/**
+ * Returns curves keyed like "Kamino_SOL", "Kamino_USDC", ...
+ * Each value has { borrowRates: {knots, values}, lendingRates: {knots, values} }.
+ *
+ * @param connection Solana connection
+ * @param tokenData  Record of tokens to include (symbol/address in your TokenData)
+ * @param stepFraction step size as FRACTION of 1 (0.02 → 2% steps, 0.10 → 10% steps)
+ */
+export async function getKaminoCurves(
     connection: Connection,
-    tokenData: Record<string, TokenData>
-): Promise<any> {
+    tokenData: Record<string, TokenData>,
+    stepFraction: number = 0.02
+): Promise<CurvesResponse> {
     try {
         const kaminoMarket = await KaminoMarket.load(
             connection,
-            new PublicKey('7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF'),
+            new PublicKey("7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF"),
             400
-        )
+        );
 
         if (!kaminoMarket) {
-            console.warn('KaminoMarket returned null or undefined.')
-            return []
+            console.warn("KaminoMarket returned null or undefined.");
+            return {};
         }
 
-        await kaminoMarket.loadReserves()
-        // save for later
-        //const currentSlot = await connection.getSlot()
+        await kaminoMarket.loadReserves();
 
-        const rates = Object.entries(tokenData)
-            .map(([, metadata]) => {
-                try {
-                    const mint = new PublicKey(metadata.tokenAddress)
-                    const k = kaminoMarket.getReserveByMint(mint)
-                    if (!k) throw new Error('No reserve for mint')
+        const knotsPercent = makePercentKnots(stepFraction);
+        const out: CurvesResponse = {};
 
-                    // ---- Safe conversions (avoid BN > 53-bit toNumber) ----
-                    const mintFactor = Number(k.getMintFactor().toString())
-                    if (!mintFactor || mintFactor === 0) throw new Error('Invalid mint factor')
-
-                    // const utilization = k.calculateUtilizationRatio()
-                    const stats = k.stats
-
-
-                    // ---- Borrow curve logging (transform at assignment) ----
-                    const borrowCurve = stats.borrowCurve // [number, number][]
-                    const borrowRateCurvePoints = k.state.config.borrowRateCurve.points
-                    borrowCurveLog[metadata.tokenSymbol] = transformBorrowCurve(borrowCurve)
-
-                    const protocolTakeRatePct = k.state.config.protocolTakeRatePct;
-                    const slotAdjustmentFactor = k.slotAdjustmentFactor();
-                    const fixedHostInterestRate =  k.getFixedHostInterestRate().toNumber()
-
-                    const wrappedReserveData = {
-                        protocolTakeRatePct,
-                        borrowRateCurvePoints,
-                        slotAdjustmentFactor,
-                        fixedHostInterestRate
-                    };
-
-                    const step = 0.10;
-                    const arr = Array.from({ length: Math.floor(1 / step) + 1 },
-                        (_, i) => +(i * step).toFixed(2));
-
-// Initialize the dictionaries
-                    const lendingRates: Record<number, number> = {};
-                    const borrowRates: Record<number, number> = {};
-
-                    arr.forEach(arrayVal => {
-                        const [val1, val2] = getLendingAndBorrowingApys(wrappedReserveData, arrayVal);
-                        lendingRates[arrayVal] = val1;
-                        borrowRates[arrayVal] = val2;
-                    });
-
-                    console.log(lendingRates);
-                    console.log(borrowRates);
-                    //const lendingRate_ = k.totalSupplyAPY(currentSlot);
-                    //const borrowingRate_ = k.totalBorrowAPY(currentSlot);
-
-
-                    // const rate: ProtocolDataRow = {
-                    //     "protocol": 'Kamino',
-                    //     "token": metadata.tokenSymbol,
-                    //     "currentUtilization": utilization,
-                    //     "lendingRate": lendingRate_,
-                    //     "borrowingRate": borrowingRate_,
-                    // }
-
-                    // // Normalize undefined/nulls to NaN for downstream formatting
-                    // for (const [key, value] of Object.entries(rate)) {
-                    //     if (value === undefined || value === null) {
-                    //         // @ts-expect-error dynamic assignment
-                    //         rate[key] = NaN
-                    //     }
-                    // }
-
-                    return null
-                } catch (err) {
-                    console.warn(`Skipping ${metadata.tokenSymbol}:`, err)
-                    return null
+        for (const [, metadata] of Object.entries(tokenData)) {
+            try {
+                const mint = new PublicKey(metadata.tokenAddress);
+                const k = kaminoMarket.getReserveByMint(mint);
+                if (!k) {
+                    console.warn(`No reserve for mint ${metadata.tokenSymbol}`);
+                    continue; // skip to next token
                 }
-            })
-            // .filter((r): r is ProtocolDataRow => r !== null)
-            // .sort((a, b) => {
-            //     const cat = a.category.localeCompare(b.category)
-            //     return cat !== 0 ? cat : a.token.localeCompare(b.token)
-            // })
 
-        // Write once per run (timestamped file)
-        // Only write locally (skip in Vercel or production)
-        if (process.env.VERCEL !== '1' && process.env.NODE_ENV !== 'production') {
-            await writeBorrowCurveLog(borrowCurveLog);
+
+                // ---- Optional: capture/transform the on-chain borrow curve for logs
+                const stats = k.stats;
+                const borrowCurveRaw = stats.borrowCurve; // [number, number][]
+                borrowCurveLog[metadata.tokenSymbol] = transformBorrowCurve(borrowCurveRaw);
+
+                // ---- Minimal wrapped data needed for your APY calculator
+                const protocolTakeRatePct = k.state.config.protocolTakeRatePct;
+                const borrowRateCurvePoints = k.state.config.borrowRateCurve.points;
+                const slotAdjustmentFactor = k.slotAdjustmentFactor();
+                const fixedHostInterestRate = k.getFixedHostInterestRate().toNumber();
+
+                const wrappedReserveData = {
+                    protocolTakeRatePct,
+                    borrowRateCurvePoints,
+                    slotAdjustmentFactor,
+                    fixedHostInterestRate,
+                };
+
+                // ---- Compute lend/borrow vectors over the knots
+                const lendingValues: number[] = [];
+                const borrowValues: number[] = [];
+
+                for (const knotPercent of knotsPercent) {
+                    const u = knotPercent / 100; // convert percent → fraction 0..1
+                    const [lendApy, borrowApy] = getLendingAndBorrowingApys(wrappedReserveData, u);
+                    lendingValues.push(lendApy);
+                    borrowValues.push(borrowApy);
+                }
+
+                const key = `Kamino_${metadata.tokenSymbol}`;
+                out[key] = {
+                    lendingRates: { knots: knotsPercent, values: lendingValues },
+                    borrowRates: { knots: knotsPercent, values: borrowValues },
+                };
+            } catch (err) {
+                console.warn(`Skipping ${metadata.tokenSymbol}:`, err);
+
+            }
         }
+
+        // If you want to log the transformed borrow curves locally:
+        // if (process.env.VERCEL !== "1" && process.env.NODE_ENV !== "production") {
+        //   await writeBorrowCurveLog(borrowCurveLog);
+        // }
+
+        return out;
     } catch (err) {
-        console.error('Failed to get Kamino rates:', err)
-        return []
+        console.error("Failed to get Kamino curves:", err);
+        return {};
     }
 }

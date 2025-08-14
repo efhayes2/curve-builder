@@ -1,4 +1,4 @@
-// lib/get-all-rates.ts
+// lib/get-all-curves.ts
 import { getTokenDataMap } from "@/lib/utils";
 import { Connection } from '@solana/web3.js';
 import { getKaminoRates } from './protocols/kamino';
